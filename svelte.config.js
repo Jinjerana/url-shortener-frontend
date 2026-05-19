@@ -14,4 +14,17 @@ const config = {
 	}
 };
 
-export default config;
+//export default config;
+
+export default{
+	kit: {
+		adapter: adapter({
+			pages: 'build',
+			assets: 'build',
+			fallback: "404.html"
+		}),
+		paths: {
+			base: '/url-shortener-frontend'
+		}
+	}
+}

@@ -1,30 +1,28 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { page } from "$app/stores";
 
-  onMount(() => {
-    console.log("Page data:", $page);
-  });
+  let url = $state("");
+  let shortCode = $state("");
+  
+  let totalClicks = $state(0);
+  let createdAt = $state("");
+  let lastAccessedAt = $state<string | null>(null);
+  let showStats = $state(false);
 
-  // svelte-ignore non_reactive_update
-  let url = "";
-  // svelte-ignore non_reactive_update
-  let shortenedUrl = "";
-  // svelte-ignore non_reactive_update
-  let stats: { totalClicks: any; createdAt: any; lastAccesedAt: any } | null =
-    null;
-  // svelte-ignore non_reactive_update
-  let error = "";
+    //let stats: { totalClicks: number; createdAt: string; lastAccessedAt: string | null } | null = $state(null);
+  
+  let error = $state("");
 
   const API = "http://localhost:8080/api";
 
   async function shortenUrl() {
     error = "";
-    stats = null;
+    //stats = null;
+    showStats = false;
+    shortCode = "";
     // Placeholder for URL shortening logic
 
     try {
-      const res = await fetch("${API}/shorten", {
+      const res = await fetch(`${API}/shorten`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -35,24 +33,42 @@
       if (!res.ok) throw new Error("Failed to shorten URL");
 
       const data = await res.json();
-      shortenedUrl = data.shortenedUrl;
+      shortCode = data.shortCode;
     } catch (e) {
       error = "Please enter a valid URL.";
     }
   }
 
   async function loadStats() {
+    console.log("Loading stats for", shortCode);
     try {
-      const res = await fetch(`${API}/stats/${shortenedUrl}`);
+      const res = await fetch(`${API}/stats/${shortCode}`);
+      console.log("Stats response:", res);
+
       if (!res.ok) throw new Error("Failed to load stats");
-      stats = await res.json();
+      const data = await res.json();
+      console.log("Stats data:", data);
+
+      totalClicks = data.totalClicks;
+      createdAt = new Date(data.createdAt).toLocaleString();
+      lastAccessedAt = data.lastAccessedAt ? new Date(data.lastAccessedAt).toLocaleString() : null;
+      showStats = true;
+      //stats = null;
+      // stats = {
+      //   totalClicks: data.totalClicks,
+      //   createdAt: new Date(data.createdAt).toLocaleString(),
+      //   lastAccessedAt: data.lastAccessedAt ? new Date(data.lastAccessedAt).toLocaleString() : null,
+      // };
+
     } catch (e) {
+      
+      console.log("Error loading stats:", e);
       error = "Failed to load statistics.";
     }
   }
 
   function copy() {
-    navigator.clipboard.writeText('${API.replace("/api", "")}/${shortenedUrl}');
+    navigator.clipboard.writeText(`http://localhost:8080/${shortCode}`);
   }
 </script>
 
@@ -73,12 +89,12 @@
     <p style="color: red;">{error}</p>
   {/if}
 
-  {#if shortenedUrl}
+  {#if shortCode}
     <div class="result">
       <p>
         Short URL: <a
-          href={"http://localhost:8080/${shortenedUrl}"}
-          target="_blank">/{shortenedUrl}</a
+          href={`http://localhost:8080/${shortCode}`}
+          target="_blank">http://localhost:8080/{shortCode}</a
         >
       </p>
       <div class="buttons">
@@ -88,12 +104,12 @@
     </div>
   {/if}
 
-  {#if stats}
+  {#if showStats}
     <div class="stats">
       <h2>Statistics</h2>
-      <p>Total Clicks: {stats.totalClicks}</p>
-      <p>Created: {stats.createdAt}</p>
-      <p>Last Access: {stats.lastAccesedAt ?? "-"}</p>
+      <p>Total Clicks: {totalClicks}</p>
+      <p>Created: {createdAt}</p>
+      <p>Last Access: {lastAccessedAt ?? "-"}</p>
     </div>
   {/if}
 </main>
