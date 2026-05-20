@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import * as QRCode from 'qrcode';
+  import { onMount } from 'svelte';
 
   // Svelte 5 Runes
   let url = $state("");
@@ -17,6 +18,23 @@
 
   const API = "https://url-shortener-api-ncfg.onrender.com/api";
   const LIVE_URL_BASE = "https://url-shortener-api-ncfg.onrender.com";
+
+  onMount(() => {
+    // Check if there's a short code in the URL (e.g., /abc123)
+    const urlParams = new URLSearchParams(window.location.search);
+    if(urlParams.get('error') === 'notfound') {
+      error = "The short code you are looking for does not exist or was entered incorrectly.";
+    }
+
+    const saved = localStorage.getItem("zaplink_history");
+    if (saved) {
+      try {
+        const history = JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to load history.", e);
+      }
+    }
+  });
 
   async function shortenUrl() {
     error = "";
@@ -46,17 +64,30 @@
   }
 
   async function loadStats() {
+    error = "";
+
     try {
       const res = await fetch(`${API}/stats/${shortCode}`);
-      if (!res.ok) throw new Error();
+      if (!res.ok){
+        showStats = false;
+        error = "Statistics not available for this link.";
+        return;
+      }
+
       const data = await res.json();
+
+      if(!data || data.totalClicks === undefined){
+        throw new Error("Invalid data format");
+      }
 
       totalClicks = data.totalClicks;
       createdAt = new Date(data.createdAt).toLocaleString();
       lastAccessedAt = data.lastAccessedAt ? new Date(data.lastAccessedAt).toLocaleString() : null;
       showStats = true;
     } catch (e) {
-      error = "Failed to load statistics.";
+      console.error("Failed to load statistics.", e);
+      showStats = false;
+      error = "Failed to load statistics. Please check the short code.";
     }
   }
 
@@ -115,52 +146,70 @@
         />
         <button onclick={shortenUrl} class="btn-primary">Shorten Link</button>
       </div>
+
       {#if error}
-        <p class="error-msg">⚠️ {error}</p>
+       <div class="error-page-card animate-fade-in">
+        <div class="error-icon">🔍</div>
+        <h2>Link not found!</h2>
+        <p class="error-description">
+          The short code you are looking for does not exist or was entered incorrectly. 
+          Make sure you didn't accidentally miss or delete a character while copying.
+        </p>
+        
+        <div class="error-actions">
+          <button onclick={() => { error = ""; url = ""; shortCode = ""; }} class="btn-retry">
+            🔄 Create New Link
+          </button>
+          
+          {#if history.length > 0}
+            <p class="error-hint">Or select a working link from your recent history below!</p>
+          {/if}
+        </div>
+      </div>
       {/if}
     </section>
 
-    {#if shortCode}
-      <div class="dashboard-layout">
-        
-        <div class="panel-card">
-          <h3>Your Shortened Link</h3>
-          <div class="url-display">
-            <a href={`${LIVE_URL_BASE}/${shortCode}`} target="_blank" rel="noreferrer">
-              {LIVE_URL_BASE.replace('https://', '')}/{shortCode}
-            </a>
-          </div>
-          
-          <div class="action-row">
-            <button onclick={copyToClipboard} class="btn-secondary">
-              {copied ? 'Copied! ✓' : 'Copy Link'}
-            </button>
-            <button onclick={loadStats} class="btn-secondary">
-              {showStats ? 'Update Stats' : 'Track Clicks'}
-            </button>
-          </div>
-
-          {#if showStats}
-            <div class="analytics-box">
-              <p><strong>Total Clicks:</strong> {totalClicks}</p>
-              <p><strong>Created:</strong> {createdAt}</p>
-              <p><strong>Last Access:</strong> {lastAccessedAt ?? "Never"}</p>
-            </div>
-          {/if}
-        </div>
-
-        <div class="panel-card qr-panel">
-          <h3>Dynamic QR Code</h3>
-          <div class="canvas-holder">
-            <canvas bind:this={canvasElement}></canvas>
-          </div>
-          <button onclick={downloadQR} class="btn-download">
-            📥 Download QR Code (.png)
-          </button>
-        </div>
-
+    {#if shortCode && !error}
+  <div class="dashboard-layout">
+    
+    <div class="panel-card">
+      <h3>Your Shortened Link</h3>
+      <div class="url-display">
+        <a href={`${LIVE_URL_BASE}/${shortCode}`} target="_blank" rel="noreferrer">
+          {LIVE_URL_BASE.replace('https://', '')}/{shortCode}
+        </a>
       </div>
-    {/if}
+      
+      <div class="action-row">
+        <button onclick={copyToClipboard} class="btn-secondary">
+          {copied ? 'Copied! ✓' : 'Copy Link'}
+        </button>
+        <button onclick={loadStats} class="btn-secondary">
+          {showStats ? 'Update Stats' : 'Track Clicks'}
+        </button>
+      </div>
+
+      {#if showStats}
+        <div class="analytics-box">
+          <p><strong>Total Clicks:</strong> {totalClicks}</p>
+          <p><strong>Created:</strong> {createdAt}</p>
+          <p><strong>Last Access:</strong> {lastAccessedAt ?? "Never"}</p>
+        </div>
+      {/if}
+    </div>
+
+    <div class="panel-card qr-panel">
+      <h3>Dynamic QR Code</h3>
+      <div class="canvas-holder">
+        <canvas bind:this={canvasElement}></canvas>
+      </div>
+      <button onclick={downloadQR} class="btn-download">
+        📥 Download QR Code (.png)
+      </button>
+    </div>
+
+  </div>
+{/if}
   </main>
 </div>
 
@@ -326,9 +375,75 @@
     color: #60a5fa;
   }
 
-  .error-msg {
+  .error-page-card {
+    background: linear-gradient(135deg, #1e1b4b 0%, #111827 100%);
+    border: 1px solid #ef4444; /* Ein schicker roter Rahmen für die Warnung */
+    padding: 35px;
+    border-radius: 16px;
+    text-align: center;
+    max-width: 500px;
+    width: 100%;
+    box-shadow: 0 10px 30px rgba(239, 68, 68, 0.1);
+    margin: 20px auto;
+  }
+
+  .error-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    animation: pulse 2s infinite;
+  }
+
+  .error-page-card h2 {
     color: #f87171;
-    margin-top: 10px;
+    font-size: 1.5rem;
+    margin-top: 0;
+    margin-bottom: 10px;
+  }
+
+  .error-description {
+    color: #94a3b8;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-bottom: 25px;
+  }
+
+  .btn-retry {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: auto; /* Verhindert, dass der Button die ganze Breite einnimmt */
+    display: inline-block;
+  }
+
+  .btn-retry:hover {
+    background: #dc2626;
+  }
+
+  .error-hint {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 20px;
     margin-bottom: 0;
+  }
+
+  /* Eine kleine, geschmeidige Einblend-Animation */
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
   }
 </style>
