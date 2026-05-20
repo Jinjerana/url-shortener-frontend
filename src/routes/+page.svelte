@@ -12,7 +12,7 @@
   
   let error = $state("");
 
-  const API = "http://localhost:8080/api";
+  const API = "https://url-shortener-api-ncfg.onrender.com/api";
 
   async function shortenUrl() {
     error = "";
