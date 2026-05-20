@@ -3,7 +3,14 @@
   import * as QRCode from 'qrcode';
   import { onMount } from 'svelte';
 
-  // Svelte 5 Runes
+  // Typ-Definition für unsere Historie
+  interface HistoryItem {
+    shortCode: string;
+    longUrl: string;
+    date: string;
+  }
+
+  // Svelte 5 Runes - Jetzt ist history global für die ganze Datei sichtbar!
   let url = $state("");
   let shortCode = $state("");
   let error = $state("");
@@ -15,26 +22,51 @@
 
   let copied = $state(false);
   let canvasElement = $state<HTMLCanvasElement | null>(null);
+  
+  // Unsere Historie als reaktiver Zustand
+  let historyList = $state<HistoryItem[]>([]);
 
   const API = "https://url-shortener-api-ncfg.onrender.com/api";
   const LIVE_URL_BASE = "https://url-shortener-api-ncfg.onrender.com";
 
   onMount(() => {
-    // Check if there's a short code in the URL (e.g., /abc123)
+    // 1. Checken, ob wir wegen eines 404-Fehlers vom Backend umgeleitet wurden
     const urlParams = new URLSearchParams(window.location.search);
-    if(urlParams.get('error') === 'notfound') {
+    if (urlParams.get('error') === 'notfound') {
       error = "The short code you are looking for does not exist or was entered incorrectly.";
     }
 
+    // 2. Historie sauber aus dem LocalStorage laden
     const saved = localStorage.getItem("zaplink_history");
     if (saved) {
       try {
-        const history = JSON.parse(saved);
+        historyList = JSON.parse(saved);
       } catch (e) {
         console.error("Failed to load history.", e);
       }
     }
   });
+
+  // Funktion zum Speichern eines neuen Links in der Historie
+  function saveToHistory(code: string, originalUrl: string) {
+    const newItem: HistoryItem = {
+      shortCode: code,
+      longUrl: originalUrl,
+      date: new Date().toLocaleDateString()
+    };
+    
+    // Neuen Eintrag nach oben packen, Duplikate filtern, max. 5 Einträge behalten
+    historyList = [newItem, ...historyList.filter(item => item.shortCode !== code)].slice(0, 5);
+    localStorage.setItem("zaplink_history", JSON.stringify(historyList));
+  }
+
+  // Wenn man in der Historie auf einen Link klickt
+  function selectFromHistory(item: HistoryItem) {
+    shortCode = item.shortCode;
+    url = item.longUrl;
+    error = "";
+    showStats = false;
+  }
 
   async function shortenUrl() {
     error = "";
@@ -58,6 +90,9 @@
 
       const data = await res.json();
       shortCode = data.shortCode;
+      
+      // HIER SPEICHERN WIR DEN ERFOLG IN DIE HISTORIE!
+      saveToHistory(data.shortCode, url);
     } catch (e) {
       error = "Please enter a valid URL (e.g., https://example.com).";
     }
@@ -68,7 +103,7 @@
 
     try {
       const res = await fetch(`${API}/stats/${shortCode}`);
-      if (!res.ok){
+      if (!res.ok) {
         showStats = false;
         error = "Statistics not available for this link.";
         return;
@@ -76,7 +111,7 @@
 
       const data = await res.json();
 
-      if(!data || data.totalClicks === undefined){
+      if (!data || data.totalClicks === undefined) {
         throw new Error("Invalid data format");
       }
 
@@ -161,7 +196,7 @@
             🔄 Create New Link
           </button>
           
-          {#if history.length > 0}
+          {#if historyList.length > 0}
             <p class="error-hint">Or select a working link from your recent history below!</p>
           {/if}
         </div>
@@ -170,46 +205,63 @@
     </section>
 
     {#if shortCode && !error}
-  <div class="dashboard-layout">
-    
-    <div class="panel-card">
-      <h3>Your Shortened Link</h3>
-      <div class="url-display">
-        <a href={`${LIVE_URL_BASE}/${shortCode}`} target="_blank" rel="noreferrer">
-          {LIVE_URL_BASE.replace('https://', '')}/{shortCode}
-        </a>
-      </div>
-      
-      <div class="action-row">
-        <button onclick={copyToClipboard} class="btn-secondary">
-          {copied ? 'Copied! ✓' : 'Copy Link'}
-        </button>
-        <button onclick={loadStats} class="btn-secondary">
-          {showStats ? 'Update Stats' : 'Track Clicks'}
-        </button>
-      </div>
+      <div class="dashboard-layout">
+        
+        <div class="panel-card">
+          <h3>Your Shortened Link</h3>
+          <div class="url-display">
+            <a href={`${LIVE_URL_BASE}/${shortCode}`} target="_blank" rel="noreferrer">
+              {LIVE_URL_BASE.replace('https://', '')}/{shortCode}
+            </a>
+          </div>
+          
+          <div class="action-row">
+            <button onclick={copyToClipboard} class="btn-secondary">
+              {copied ? 'Copied! ✓' : 'Copy Link'}
+            </button>
+            <button onclick={loadStats} class="btn-secondary">
+              {showStats ? 'Update Stats' : 'Track Clicks'}
+            </button>
+          </div>
 
-      {#if showStats}
-        <div class="analytics-box">
-          <p><strong>Total Clicks:</strong> {totalClicks}</p>
-          <p><strong>Created:</strong> {createdAt}</p>
-          <p><strong>Last Access:</strong> {lastAccessedAt ?? "Never"}</p>
+          {#if showStats}
+            <div class="analytics-box">
+              <p><strong>Total Clicks:</strong> {totalClicks}</p>
+              <p><strong>Created:</strong> {createdAt}</p>
+              <p><strong>Last Access:</strong> {lastAccessedAt ?? "Never"}</p>
+            </div>
+          {/if}
         </div>
-      {/if}
-    </div>
 
-    <div class="panel-card qr-panel">
-      <h3>Dynamic QR Code</h3>
-      <div class="canvas-holder">
-        <canvas bind:this={canvasElement}></canvas>
+        <div class="panel-card qr-panel">
+          <h3>Dynamic QR Code</h3>
+          <div class="canvas-holder">
+            <canvas bind:this={canvasElement}></canvas>
+          </div>
+          <button onclick={downloadQR} class="btn-download">
+            📥 Download QR Code (.png)
+          </button>
+        </div>
+
       </div>
-      <button onclick={downloadQR} class="btn-download">
-        📥 Download QR Code (.png)
-      </button>
-    </div>
+    {/if}
 
-  </div>
-{/if}
+    {#if historyList.length > 0 && !shortCode}
+      <section class="history-section" style="margin-top: 30px;">
+        <h3 style="color: #94a3b8; font-size: 1rem; text-transform: uppercase; margin-bottom: 10px;">Recent Links</h3>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          {#each historyList as item}
+            <button onclick={() => selectFromHistory(item)} style="background: #111827; border: 1px solid #1f2937; color: white; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; text-align: left; cursor: pointer; width: 100%;">
+              <div>
+                <div style="color: #60a5fa; font-weight: bold;">{LIVE_URL_BASE.replace('https://', '')}/{item.shortCode}</div>
+                <div style="color: #64748b; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px;">{item.longUrl}</div>
+              </div>
+              <div style="color: #475569; font-size: 0.8rem;">{item.date}</div>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
   </main>
 </div>
 
