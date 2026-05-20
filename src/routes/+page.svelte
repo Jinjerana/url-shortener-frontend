@@ -68,7 +68,7 @@
   }
 
   function copy() {
-    navigator.clipboard.writeText(`http://localhost:8080/${shortCode}`);
+    navigator.clipboard.writeText(`https://url-shortener-api-ncfg.onrender.com/${shortCode}`);
   }
 </script>
 
@@ -93,8 +93,8 @@
     <div class="result">
       <p>
         Short URL: <a
-          href={`http://localhost:8080/${shortCode}`}
-          target="_blank">http://localhost:8080/{shortCode}</a
+          href={`https://url-shortener-api-ncfg.onrender.com/${shortCode}`}
+          target="_blank">https://url-shortener-api-ncfg.onrender.com/{shortCode}</a
         >
       </p>
       <div class="buttons">
