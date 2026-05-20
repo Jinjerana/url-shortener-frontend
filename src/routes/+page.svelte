@@ -1,180 +1,334 @@
 <script lang="ts">
+  import { tick } from 'svelte';
+  import * as QRCode from 'qrcode';
 
+  // Svelte 5 Runes
   let url = $state("");
   let shortCode = $state("");
+  let error = $state("");
   
   let totalClicks = $state(0);
   let createdAt = $state("");
   let lastAccessedAt = $state<string | null>(null);
   let showStats = $state(false);
 
-    //let stats: { totalClicks: number; createdAt: string; lastAccessedAt: string | null } | null = $state(null);
-  
-  let error = $state("");
+  let copied = $state(false);
+  let canvasElement = $state<HTMLCanvasElement | null>(null);
 
   const API = "https://url-shortener-api-ncfg.onrender.com/api";
+  const LIVE_URL_BASE = "https://url-shortener-api-ncfg.onrender.com";
 
   async function shortenUrl() {
     error = "";
-    //stats = null;
     showStats = false;
     shortCode = "";
-    // Placeholder for URL shortening logic
+    copied = false;
+
+    if (!url.trim()) {
+      error = "Please enter a URL first.";
+      return;
+    }
 
     try {
       const res = await fetch(`${API}/shorten`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ originalUrl: url }),
       });
 
-      if (!res.ok) throw new Error("Failed to shorten URL");
+      if (!res.ok) throw new Error();
 
       const data = await res.json();
       shortCode = data.shortCode;
     } catch (e) {
-      error = "Please enter a valid URL.";
+      error = "Please enter a valid URL (e.g., https://example.com).";
     }
   }
 
   async function loadStats() {
-    console.log("Loading stats for", shortCode);
     try {
       const res = await fetch(`${API}/stats/${shortCode}`);
-      console.log("Stats response:", res);
-
-      if (!res.ok) throw new Error("Failed to load stats");
+      if (!res.ok) throw new Error();
       const data = await res.json();
-      console.log("Stats data:", data);
 
       totalClicks = data.totalClicks;
       createdAt = new Date(data.createdAt).toLocaleString();
       lastAccessedAt = data.lastAccessedAt ? new Date(data.lastAccessedAt).toLocaleString() : null;
       showStats = true;
-      //stats = null;
-      // stats = {
-      //   totalClicks: data.totalClicks,
-      //   createdAt: new Date(data.createdAt).toLocaleString(),
-      //   lastAccessedAt: data.lastAccessedAt ? new Date(data.lastAccessedAt).toLocaleString() : null,
-      // };
-
     } catch (e) {
-      
-      console.log("Error loading stats:", e);
       error = "Failed to load statistics.";
     }
   }
 
-  function copy() {
-    navigator.clipboard.writeText(`https://url-shortener-api-ncfg.onrender.com/${shortCode}`);
+  function copyToClipboard() {
+    navigator.clipboard.writeText(`${LIVE_URL_BASE}/${shortCode}`);
+    copied = true;
+    setTimeout(() => (copied = false), 2000);
   }
+
+  async function generateQR() {
+    if (!shortCode || !canvasElement) return;
+    await tick();
+    try {
+      await QRCode.toCanvas(canvasElement, `${LIVE_URL_BASE}/${shortCode}`, {
+        width: 180,
+        margin: 1,
+        color: {
+          dark: '#0f172a',
+          light: '#ffffff'
+        }
+      });
+    } catch (err) {
+      console.error("QR Code Error:", err);
+    }
+  }
+
+  function downloadQR() {
+    if (!canvasElement) return;
+    const link = document.createElement('a');
+    link.download = `qr-${shortCode}.png`;
+    link.href = canvasElement.toDataURL();
+    link.click();
+  }
+
+  // Svelte 5 Reactivity Trigger
+  $effect(() => {
+    if (shortCode) {
+      generateQR();
+    }
+  });
 </script>
 
-<main>
-  <h1>Make it short</h1>
+<div class="app-container">
+  <header class="main-header">
+    <h1>ZapLink <span class="version-badge">v1</span></h1>
+    <p class="subtitle">Shorten your links, generate dynamic QR codes and track analytics.</p>
+  </header>
 
-  <p>Put a long Link hier</p>
-
-  <div class="card">
-    <input bind:value={url} placeholder="Enter URL" />
-  </div>
-
-  <p>
-    <button onclick={shortenUrl}>Shorten</button>
-  </p>
-
-  {#if error}
-    <p style="color: red;">{error}</p>
-  {/if}
-
-  {#if shortCode}
-    <div class="result">
-      <p>
-        Short URL: <a
-          href={`https://url-shortener-api-ncfg.onrender.com/${shortCode}`}
-          target="_blank">https://url-shortener-api-ncfg.onrender.com/{shortCode}</a
-        >
-      </p>
-      <div class="buttons">
-        <button onclick={copy}>Copy to Clipboard</button>
-        <button onclick={loadStats}>Load Stats</button>
+  <main class="content-box">
+    <section class="input-section">
+      <div class="input-flex">
+        <input 
+          type="url" 
+          bind:value={url} 
+          placeholder="Paste your long URL here (https://...)" 
+        />
+        <button onclick={shortenUrl} class="btn-primary">Shorten Link</button>
       </div>
-    </div>
-  {/if}
+      {#if error}
+        <p class="error-msg">⚠️ {error}</p>
+      {/if}
+    </section>
 
-  {#if showStats}
-    <div class="stats">
-      <h2>Statistics</h2>
-      <p>Total Clicks: {totalClicks}</p>
-      <p>Created: {createdAt}</p>
-      <p>Last Access: {lastAccessedAt ?? "-"}</p>
-    </div>
-  {/if}
-</main>
+    {#if shortCode}
+      <div class="dashboard-layout">
+        
+        <div class="panel-card">
+          <h3>Your Shortened Link</h3>
+          <div class="url-display">
+            <a href={`${LIVE_URL_BASE}/${shortCode}`} target="_blank" rel="noreferrer">
+              {LIVE_URL_BASE.replace('https://', '')}/{shortCode}
+            </a>
+          </div>
+          
+          <div class="action-row">
+            <button onclick={copyToClipboard} class="btn-secondary">
+              {copied ? 'Copied! ✓' : 'Copy Link'}
+            </button>
+            <button onclick={loadStats} class="btn-secondary">
+              {showStats ? 'Update Stats' : 'Track Clicks'}
+            </button>
+          </div>
+
+          {#if showStats}
+            <div class="analytics-box">
+              <p><strong>Total Clicks:</strong> {totalClicks}</p>
+              <p><strong>Created:</strong> {createdAt}</p>
+              <p><strong>Last Access:</strong> {lastAccessedAt ?? "Never"}</p>
+            </div>
+          {/if}
+        </div>
+
+        <div class="panel-card qr-panel">
+          <h3>Dynamic QR Code</h3>
+          <div class="canvas-holder">
+            <canvas bind:this={canvasElement}></canvas>
+          </div>
+          <button onclick={downloadQR} class="btn-download">
+            📥 Download QR Code (.png)
+          </button>
+        </div>
+
+      </div>
+    {/if}
+  </main>
+</div>
 
 <style>
-  main {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    background: #0f172a;
-    color: #fff;
-    font-family: system-ui;
-    flex-direction: column;
+  :global(body) {
+    background-color: #0b0f19;
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  .app-container {
+    max-width: 850px;
+    margin: 0 auto;
+    padding: 50px 20px;
+    color: #f8fafc;
+  }
+
+  .main-header {
+    text-align: center;
+    margin-bottom: 35px;
   }
 
   h1 {
-    text-align: center;
-    margin-bottom: 20px;
+    font-size: 2.4rem;
+    font-weight: 800;
+    margin-bottom: 8px;
+    color: #3b82f6;
   }
 
-  .card {
+  .version-badge {
+    font-size: 0.8rem;
+    padding: 3px 8px;
     background: #1e293b;
-    padding: 30px;
-    border-radius: 16px;
-    width: 350px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    color: #94a3b8;
+    margin-left: 5px;
   }
 
-  input {
-    width: 100%;
-    padding: 10px;
-    border: none;
-    border-radius: 8px;
-    margin-bottom: 10px;
+  .subtitle {
+    color: #94a3b8;
+    margin: 0;
   }
 
-  button {
-    width: 100%;
-    padding: 10px;
-    border: none;
-    border-radius: 8px;
-    background: #3b82f6;
-    color: #fff;
-    cursor: pointer;
-    margin-top: 5px;
-    transition: background 0.3s ease;
+  .input-section {
+    background: #111827;
+    border: 1px solid #1f2937;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 25px;
   }
 
-  button:hover {
-    background: #2563eb;
-  }
-
-  .buttons {
+  .input-flex {
     display: flex;
     gap: 10px;
   }
 
-  .result {
-    margin-top: 15px;
+  input {
+    flex: 1;
+    background: #1f2937;
+    border: 1px solid #374151;
+    padding: 12px;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1rem;
   }
 
-  .stats {
+  input:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+
+  .btn-primary {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .btn-primary:hover {
+    background: #2563eb;
+  }
+
+  .dashboard-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .panel-card {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .url-display {
+    background: #1f2937;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    margin-bottom: 15px;
+  }
+
+  .url-display a {
+    color: #60a5fa;
+    text-decoration: none;
+    font-weight: bold;
+  }
+
+  .action-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-secondary {
+    flex: 1;
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #cbd5e1;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .btn-secondary:hover {
+    background: #334155;
+  }
+
+  .analytics-box {
     margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #1f2937;
     font-size: 0.9rem;
-    color: #cbd5f5;
+    color: #94a3b8;
+  }
+
+  .qr-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .canvas-holder {
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    display: inline-flex;
+  }
+
+  .btn-download {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+
+  .btn-download:hover {
+    color: #60a5fa;
+  }
+
+  .error-msg {
+    color: #f87171;
+    margin-top: 10px;
+    margin-bottom: 0;
   }
 </style>
