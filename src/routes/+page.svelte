@@ -102,11 +102,15 @@
 
   async function loadStats() {
     error = "";
+    showStats = false;
+    totalClicks = 0;
+    createdAt = "";
+    lastAccessedAt = null;
 
     try {
       const res = await fetch(`${API}/stats/${shortCode}`);
+
       if (!res.ok) {
-        showStats = false;
         error = "Statistics not available for this link.";
         return;
       }
@@ -117,10 +121,13 @@
         throw new Error("Invalid data format");
       }
 
+      await tick(); // Warten, bis die UI aktualisiert ist, bevor wir die Stats anzeigen
+
       totalClicks = data.totalClicks;
       createdAt = new Date(data.createdAt).toLocaleString();
       lastAccessedAt = data.lastAccessedAt ? new Date(data.lastAccessedAt).toLocaleString() : null;
       showStats = true;
+
     } catch (e) {
       console.error("Failed to load statistics.", e);
       showStats = false;
@@ -186,6 +193,7 @@
 
       {#if error}
         <p class="error-message">{error}</p>
+      {/if}
 
       {#if notFoundError}
        <div class="error-page-card animate-fade-in">
