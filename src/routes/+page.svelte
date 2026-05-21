@@ -14,6 +14,7 @@
   let url = $state("");
   let shortCode = $state("");
   let error = $state("");
+  let notFoundError = $state(false);
   
   let totalClicks = $state(0);
   let createdAt = $state("");
@@ -33,6 +34,7 @@
     // 1. Checken, ob wir wegen eines 404-Fehlers vom Backend umgeleitet wurden
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('error') === 'notfound') {
+      notFoundError = true;
       error = "The short code you are looking for does not exist or was entered incorrectly.";
     }
 
@@ -183,16 +185,18 @@
       </div>
 
       {#if error}
+        <p class="error-message">{error}</p>
+
+      {#if notFoundError}
        <div class="error-page-card animate-fade-in">
         <div class="error-icon">🔍</div>
         <h2>Link not found!</h2>
         <p class="error-description">
           The short code you are looking for does not exist or was entered incorrectly. 
-          Make sure you didn't accidentally miss or delete a character while copying.
         </p>
         
         <div class="error-actions">
-          <button onclick={() => { error = ""; url = ""; shortCode = ""; }} class="btn-retry">
+          <button onclick={() => { notFoundError = false; url = ""; shortCode = ""; }} class="btn-retry">
             🔄 Create New Link
           </button>
           
